@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id           Int      @id @default(autoincrement())
+  companyName  String
+  firstName    String?
+  industry     String?
+  region       String?
+  website      String?
+  email        String   @unique
+  whyTarget    String?
+  contactNote  String?
+  status       String   @default("pending")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  logs         EmailLog[]
+}
+
+model Campaign {
+  id          Int        @id @default(autoincrement())
+  name        String
+  subject     String
+  bodyText    String
+  bodyHtml    String?
+  delaySec    Int        @default(30)
+  maxPerDay   Int        @default(20)
+  status      String     @default("draft")
+  sentCount   Int        @default(0)
+  openCount   Int        @default(0)
+  replyCount  Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  logs        EmailLog[]
+}
+
+model EmailLog {
+  id         Int      @id @default(autoincrement())
+  campaignId Int?
+  leadId     Int?
+  leadEmail  String
+  subject    String
+  status     String
+  error      String?
+  sentAt     DateTime @default(now())
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  lead       Lead?     @relation(fields: [leadId], references: [id])
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
