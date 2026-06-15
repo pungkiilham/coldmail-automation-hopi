@@ -4,6 +4,7 @@ import "./globals.css";
 import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import SandboxBanner from "@/components/SandboxBanner";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-gray-50 text-gray-900">
+        <SandboxBanner />
         <nav className="bg-indigo-900 text-white px-6 py-3 flex items-center gap-6 text-sm font-medium shadow-md">
           <Link href="/" className="text-lg font-bold tracking-tight mr-4">✉️ Hopi Mail</Link>
           {nav.map((n) => (

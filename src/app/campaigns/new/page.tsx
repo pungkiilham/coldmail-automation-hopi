@@ -22,11 +22,18 @@ export default function NewCampaignPage() {
     maxPerDay: 20,
   });
   const [sending, setSending] = useState(false);
+  const [testSending, setTestSending] = useState(false);
   const [log, setLog] = useState<string[]>([]);
-  const [result, setResult] = useState<{ campaignId: number; status: string; sent: number; total: number } | null>(null);
+  const [result, setResult] = useState<{ campaignId: number; status: string; sent: number; total: number; sandbox?: boolean; testRecipient?: string } | null>(null);
+  const [settings, setSettings] = useState<{ test_recipient: string; sandbox_mode: string }>({ test_recipient: "", sandbox_mode: "false" });
 
   useEffect(() => {
-    fetch("/api/leads").then((r) => r.json()).then(setLeads);
+    fetch("/api/leads").then((r) => r.json()).then((json) => {
+      setLeads(Array.isArray(json) ? json : json.data);
+    });
+    fetch("/api/settings").then((r) => r.json()).then((data) => {
+      setSettings({ test_recipient: data.test_recipient || "", sandbox_mode: data.sandbox_mode || "false" });
+    });
   }, []);
 
   function toggleLead(id: number) {
@@ -68,10 +75,14 @@ export default function NewCampaignPage() {
       }
 
       setResult(data);
-      setLog([
+      const lines = [
         `Campaign #${data.campaignId} — ${data.status}`,
         `Sent: ${data.sent} / ${data.total}`,
-      ]);
+      ];
+      if (data.sandbox) {
+        lines.push(`Sandbox mode: all emails redirected to ${data.testRecipient}`);
+      }
+      setLog(lines);
     } catch {
       setLog(["Connection error"]);
     } finally {
@@ -79,9 +90,57 @@ export default function NewCampaignPage() {
     }
   }
 
+  async function sendTest() {
+    if (!form.subject || !form.bodyText) {
+      alert("Fill in subject and body text first.");
+      return;
+    }
+    if (!settings.test_recipient) {
+      alert("Set a Test Recipient Email in Settings first.");
+      return;
+    }
+
+    setTestSending(true);
+    setLog([]);
+    setResult(null);
+
+    try {
+      const res = await fetch("/api/campaigns/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: form.subject,
+          bodyText: form.bodyText,
+          bodyHtml: form.bodyHtml,
+          toEmail: settings.test_recipient,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setLog([`Test failed: ${data.error || "Unknown error"}`]);
+        return;
+      }
+
+      setLog([`Test email sent to ${data.to} — check your inbox.`]);
+    } catch {
+      setLog(["Connection error"]);
+    } finally {
+      setTestSending(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">New Campaign</h1>
+
+      {settings.sandbox_mode === "true" && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-sm text-yellow-800">
+          Sandbox mode is ON — emails will go to{" "}
+          <strong>{settings.test_recipient || "— not set —"}</strong> instead of real leads.
+        </div>
+      )}
 
       <form onSubmit={startCampaign} className="space-y-4">
         <div className="bg-white rounded-xl shadow-sm border p-5 space-y-3">
@@ -163,13 +222,24 @@ export default function NewCampaignPage() {
           )}
         </div>
 
-        <button
-          type="submit"
-          disabled={sending}
-          className="bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50"
-        >
-          {sending ? "Sending..." : "Start Campaign"}
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={sending}
+            className="bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50"
+          >
+            {sending ? "Sending..." : "Start Campaign"}
+          </button>
+
+          <button
+            type="button"
+            disabled={testSending}
+            onClick={sendTest}
+            className="bg-white text-gray-700 border border-gray-300 px-6 py-3 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 text-sm"
+          >
+            {testSending ? "Sending..." : "Send Test"}
+          </button>
+        </div>
       </form>
 
       {result && (
@@ -180,6 +250,7 @@ export default function NewCampaignPage() {
         }`}>
           Campaign {result.status === "completed" ? "completed" : "paused"} —
           {result.sent} of {result.total} emails sent.
+          {result.sandbox && <div className="mt-1 text-yellow-700">Sandbox: redirected to {result.testRecipient}</div>}
         </div>
       )}
 

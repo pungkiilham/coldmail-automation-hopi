@@ -13,6 +13,11 @@ const createSchema = z.object({
   leadIds: z.array(z.number().int().positive()).min(1),
 });
 
+async function getSetting(key: string): Promise<string | undefined> {
+  const row = await prisma.setting.findUnique({ where: { key } });
+  return row?.value;
+}
+
 export async function POST(req: NextRequest) {
   const body = createSchema.parse(await req.json());
 
@@ -23,6 +28,9 @@ export async function POST(req: NextRequest) {
 
   const sender = await getSenderInfo();
   const transporter = createTransporter(smtpConfig);
+
+  const sandboxMode = (await getSetting("sandbox_mode")) === "true";
+  const testRecipient = await getSetting("test_recipient");
 
   const campaign = await prisma.campaign.create({
     data: {
@@ -51,13 +59,14 @@ export async function POST(req: NextRequest) {
     const subject = personalize(body.subject);
     const text = personalize(body.bodyText);
     const html = body.bodyHtml ? personalize(body.bodyHtml) : undefined;
+    const targetEmail = sandboxMode && testRecipient ? testRecipient : lead.email;
 
     try {
       await transporter.sendMail({
         from: `"${sender.name}" <${sender.email}>`,
-        to: lead.email,
-        subject,
-        text,
+        to: targetEmail,
+        subject: sandboxMode ? `[SANDBOX] ${subject}` : subject,
+        text: sandboxMode ? `--- SANDBOX: original target: ${lead.email} <${lead.companyName}> ---\n\n${text}` : text,
         ...(html ? { html } : {}),
       });
 
@@ -65,7 +74,7 @@ export async function POST(req: NextRequest) {
         data: {
           campaignId: campaign.id,
           leadId: lead.id,
-          leadEmail: lead.email,
+          leadEmail: sandboxMode ? `${lead.email} → ${targetEmail}` : lead.email,
           subject,
           status: "sent",
         },
@@ -119,5 +128,7 @@ export async function POST(req: NextRequest) {
     status: finalStatus,
     sent,
     total: leads.length,
+    sandbox: sandboxMode,
+    testRecipient: sandboxMode ? testRecipient : undefined,
   });
 }
