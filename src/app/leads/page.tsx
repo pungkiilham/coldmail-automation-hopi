@@ -21,8 +21,8 @@ export default function LeadsPage() {
   async function loadLeads() {
     setLoading(true);
     const res = await fetch("/api/leads");
-    const data = await res.json();
-    setLeads(data);
+    const json = await res.json();
+    setLeads(Array.isArray(json) ? json : json.data);
     setLoading(false);
   }
 

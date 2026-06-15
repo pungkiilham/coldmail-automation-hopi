@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -32,7 +33,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <LogoutButton />
         </nav>
         <main className="flex-1 p-6 max-w-6xl mx-auto w-full">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </body>
     </html>

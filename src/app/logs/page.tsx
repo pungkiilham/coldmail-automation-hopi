@@ -19,7 +19,7 @@ export default function LogsPage() {
   useEffect(() => {
     fetch("/api/logs")
       .then((r) => r.json())
-      .then((data) => { setLogs(data); setLoading(false); });
+      .then((json) => { setLogs(Array.isArray(json) ? json : json.data); setLoading(false); });
   }, []);
 
   return (

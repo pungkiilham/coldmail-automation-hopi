@@ -1,36 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parse } from "csv-parse/sync";
+import { z } from "zod";
+
+const leadSchema = z.object({
+  email: z.string().email(),
+  companyname: z.string().optional().default(""),
+  company: z.string().optional().default(""),
+  industry: z.string().optional().default(""),
+  region: z.string().optional().default(""),
+  website: z.string().optional().default(""),
+});
 
 export async function POST(req: NextRequest) {
   const text = await req.text();
-  const lines = text.trim().split("\n");
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+  let records: Record<string, string>[];
+
+  try {
+    records = parse(text, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true,
+    });
+  } catch {
+    return NextResponse.json({ error: "Invalid CSV format" }, { status: 400 });
+  }
+
   let count = 0;
 
-  for (let i = 1; i < lines.length; i++) {
-    const vals = lines[i].split(",").map((v) => v.trim());
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
+  for (const raw of records) {
+    const row = Object.fromEntries(
+      Object.entries(raw).map(([k, v]) => [k.toLowerCase().replace(/\s+/g, ""), v])
+    );
 
     if (!row.email) continue;
 
-    await prisma.lead.upsert({
-      where: { email: row.email },
-      update: {
-        companyName: row.companyname || row.company || row["company name"] || "",
-        industry: row.industry || null,
-        region: row.region || null,
-        website: row.website || null,
-      },
-      create: {
-        companyName: row.companyname || row.company || row["company name"] || "",
-        email: row.email,
-        industry: row.industry || null,
-        region: row.region || null,
-        website: row.website || null,
-      },
-    });
-    count++;
+    const companyName = row.companyname || row.company || "";
+
+    try {
+      await prisma.lead.upsert({
+        where: { email: row.email },
+        update: {
+          companyName: companyName || "",
+          industry: row.industry || null,
+          region: row.region || null,
+          website: row.website || null,
+        },
+        create: {
+          companyName: companyName || "",
+          email: row.email,
+          industry: row.industry || null,
+          region: row.region || null,
+          website: row.website || null,
+        },
+      });
+      count++;
+    } catch {
+      // skip invalid rows silently
+    }
   }
 
   return NextResponse.json({ count });

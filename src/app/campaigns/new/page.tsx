@@ -23,6 +23,7 @@ export default function NewCampaignPage() {
   });
   const [sending, setSending] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+  const [result, setResult] = useState<{ campaignId: number; status: string; sent: number; total: number } | null>(null);
 
   useEffect(() => {
     fetch("/api/leads").then((r) => r.json()).then(setLeads);
@@ -50,24 +51,32 @@ export default function NewCampaignPage() {
     }
     setSending(true);
     setLog([]);
+    setResult(null);
 
-    const res = await fetch("/api/campaigns", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, leadIds: selectedIds }),
-    });
+    try {
+      const res = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, leadIds: selectedIds }),
+      });
 
-    const reader = res.body?.getReader();
-    if (!reader) return;
+      const data = await res.json();
 
-    const decoder = new TextDecoder();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const lines = decoder.decode(value).split("\n").filter(Boolean);
-      setLog((prev) => [...prev, ...lines]);
+      if (!res.ok) {
+        setLog([data.error || "Failed to start campaign"]);
+        return;
+      }
+
+      setResult(data);
+      setLog([
+        `Campaign #${data.campaignId} — ${data.status}`,
+        `Sent: ${data.sent} / ${data.total}`,
+      ]);
+    } catch {
+      setLog(["Connection error"]);
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   }
 
   return (
@@ -162,6 +171,17 @@ export default function NewCampaignPage() {
           {sending ? "Sending..." : "Start Campaign"}
         </button>
       </form>
+
+      {result && (
+        <div className={`rounded-xl p-4 text-sm font-medium ${
+          result.status === "completed" ? "bg-green-50 text-green-700 border border-green-200" :
+          result.status === "paused" ? "bg-yellow-50 text-yellow-700 border border-yellow-200" :
+          "bg-blue-50 text-blue-700 border border-blue-200"
+        }`}>
+          Campaign {result.status === "completed" ? "completed" : "paused"} —
+          {result.sent} of {result.total} emails sent.
+        </div>
+      )}
 
       {log.length > 0 && (
         <div className="bg-black text-green-400 rounded-xl p-4 text-xs font-mono max-h-80 overflow-y-auto">
