@@ -10,6 +10,8 @@ A web-based cold email outreach system built with **Next.js 16**, **Prisma**, an
 | Database | PostgreSQL via Prisma 5 |
 | Email | nodemailer (SMTP) |
 | Styling | Tailwind CSS 4 |
+| Validation | Zod |
+| CSV parsing | csv-parse |
 | Language | TypeScript |
 
 ## Project Structure
@@ -21,23 +23,31 @@ cold-mail-app/
 │   ├── seed.ts                ← Seed script (24 leads, settings, template)
 │   └── migrations/            ← Migration files for deployment
 ├── src/
+│   ├── proxy.ts               ← Auth middleware (protects all routes except /login, /api/auth)
+│   ├── components/
+│   │   ├── ErrorBoundary.tsx  ← Client-side error boundary
+│   │   └── LogoutButton.tsx   ← Logout button with API call
 │   ├── app/
 │   │   ├── page.tsx                  ← Dashboard (stats + recent logs)
-│   │   ├── layout.tsx                ← Nav layout
+│   │   ├── layout.tsx                ← Nav layout + ErrorBoundary wrapper
+│   │   ├── login/page.tsx            ← Login page with show/hide password
 │   │   ├── leads/page.tsx            ← Lead CRUD + CSV import
 │   │   ├── campaigns/page.tsx        ← Campaign list
 │   │   ├── campaigns/new/page.tsx    ← Compose & send campaign
 │   │   ├── logs/page.tsx             ← Send history table
 │   │   ├── settings/page.tsx         ← SMTP & sender config
 │   │   └── api/
-│   │       ├── leads/route.ts        ← GET/POST/DELETE leads
-│   │       ├── leads/import/route.ts ← CSV import
-│   │       ├── campaigns/route.ts    ← POST campaign (send via SSE stream)
-│   │       ├── logs/route.ts         ← GET send logs
-│   │       └── settings/route.ts     ← GET/PUT settings
+│   │       ├── auth/
+│   │       │   ├── login/route.ts    ← POST login (validates, sets session cookie)
+│   │       │   └── logout/route.ts   ← POST logout (clears session cookie)
+│   │       ├── leads/route.ts        ← GET (paginated) / POST (Zod) / DELETE leads
+│   │       ├── leads/import/route.ts ← CSV import (uses csv-parse library)
+│   │       ├── campaigns/route.ts    ← POST campaign (sends synchronously, returns JSON)
+│   │       ├── logs/route.ts         ← GET send logs (paginated)
+│   │       └── settings/route.ts     ← GET (password masked) / PUT settings (Zod)
 │   └── lib/
 │       ├── prisma.ts                 ← Prisma client singleton
-│       └── email.ts                  ← SMTP helpers
+│       └── email.ts                  ← SMTP helpers (single query for config)
 ├── vercel.json
 ├── .env.example
 ├── package.json
@@ -49,12 +59,37 @@ cold-mail-app/
 
 | Route | Description |
 |-------|-------------|
+| `/login` | Login page with show/hide password toggle |
 | `/` | Dashboard — stats cards (total leads, sent, replies, campaigns) + recent activity |
 | `/leads` | Manage leads — add, delete, bulk import from CSV |
 | `/campaigns` | List all campaigns with status badges |
-| `/campaigns/new` | Compose email, pick leads, set delay/limit, send with live stream log |
+| `/campaigns/new` | Compose email, pick leads, set delay/limit, send |
 | `/logs` | Full email send history with status & error details |
-| `/settings` | SMTP credentials + sender info (stored in DB via Prisma) |
+| `/settings` | SMTP credentials + sender info (password hidden in GET response) |
+
+## Authentication
+
+- Static username/password auth via environment variables
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `AUTH_SECRET` must be set in Vercel env
+- `src/proxy.ts` protects all routes except `/login` and `/api/auth`
+- Session cookie is HTTP-only, SHA-256 signed with `AUTH_SECRET`
+- Login page at `/login` — redirects back to original page after sign-in
+- Logout button in navigation bar
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/login` | No | Validates credentials, sets session cookie |
+| POST | `/api/auth/logout` | No | Clears session cookie |
+| GET | `/api/leads?page=1&limit=50` | Yes | Paginated lead list |
+| POST | `/api/leads` | Yes | Create lead (Zod validated) |
+| DELETE | `/api/leads?id=X` | Yes | Delete lead + its email logs |
+| POST | `/api/leads/import` | Yes | CSV import (uses csv-parse) |
+| POST | `/api/campaigns` | Yes | Create & send campaign (returns JSON result) |
+| GET | `/api/logs?page=1&limit=50` | Yes | Paginated email log list |
+| GET | `/api/settings` | Yes | Get all settings (password masked as `********`) |
+| PUT | `/api/settings` | Yes | Update settings (Zod validated; empty password = keep old) |
 
 ## Database Models
 
@@ -78,6 +113,7 @@ You need a PostgreSQL database. Options:
 ```bash
 cp .env.example .env
 # Edit .env with your PostgreSQL connection string
+# Set ADMIN_USERNAME, ADMIN_PASSWORD, AUTH_SECRET
 ```
 
 ### 3. Install & Seed
@@ -100,6 +136,10 @@ npm run dev                  # http://localhost:3000
 3. Add environment variables:
    - `DATABASE_URL` — PostgreSQL connection string (from Neon or Vercel Postgres)
    - `DIRECT_DATABASE_URL` — Direct connection (for migrations)
+   - `ADMIN_USERNAME` — Login username
+   - `ADMIN_PASSWORD` — Login password
+   - `AUTH_SECRET` — Random string for session signing
+   - `FALLBACK_SENDER_EMAIL` — (optional) Fallback sender if not set in Settings page
 4. Deploy — build runs automatically
 5. Run `npx prisma migrate deploy` in Vercel post-deploy hook or locally:
 
@@ -115,7 +155,7 @@ If using Neon's pooled connection string (with `?pgbouncer=true`), use it for `D
 ## Preloaded Data
 
 - **24 leads** from the original target-leads.csv (industries: manufacturing, Odoo partners, automotive, etc.)
-- **SMTP defaults**: host `smtp.gmail.com`, port `587`, sender `pungki@hopidigital.com`
+- **SMTP defaults**: host `smtp.gmail.com`, port `587`, sender `noreply@hopidigital.com`
 - **Sample campaign**: "Odoo Services — Cold Outreach" with Odoo-focused template text
 - Placeholder emails (e.g. `lead-thien-thuy-moc@placeholder.com`) — fill in real ones via the Leads page
 
@@ -124,13 +164,15 @@ If using Neon's pooled connection string (with `?pgbouncer=true`), use it for `D
 1. Open **Settings** → enter SMTP password (use a [Gmail App Password](https://myaccount.google.com/apppasswords))
 2. Open **Leads** → update placeholder emails to real ones
 3. Go to **Campaigns** → click **+ New Campaign** → select leads → **Start Campaign**
-4. Watch live logs stream in the browser
+4. Campaign sends synchronously (no delays between emails for serverless compat); result shows sent count
 
 ## Safety
 
-- Daily send limit (default 20) and per-email delay (default 30s) prevent spam flags
+- Daily send limit (default 20) caps emails per campaign per day
 - Campaigns auto-pause when daily limit is reached — resume later
-- SMTP password stored in database, never exposed client-side
+- SMTP password stored in database, hidden in API responses (returns `********`)
+- All inputs validated with Zod schemas
+- Session cookie is HTTP-only (not accessible via JS)
 
 ## Related Hopi Digital Assets
 
