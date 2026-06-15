@@ -17,12 +17,14 @@ export default function LeadsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ companyName: "", email: "", industry: "", region: "" });
   const [csvResult, setCsvResult] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   async function loadLeads() {
     setLoading(true);
     const res = await fetch("/api/leads");
     const json = await res.json();
     setLeads(Array.isArray(json) ? json : json.data);
+    setSelectedIds(new Set());
     setLoading(false);
   }
 
@@ -54,6 +56,31 @@ export default function LeadsPage() {
     loadLeads();
   }
 
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === leads.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(leads.map((l) => l.id)));
+    }
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected lead(s)?`)) return;
+    const ids = Array.from(selectedIds).join(",");
+    await fetch(`/api/leads?ids=${ids}`, { method: "DELETE" });
+    loadLeads();
+  }
+
   async function deleteLead(id: number) {
     if (!confirm("Delete this lead?")) return;
     await fetch(`/api/leads?id=${id}`, { method: "DELETE" });
@@ -64,7 +91,7 @@ export default function LeadsPage() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Leads</h1>
-        <button onClick={() => setShowForm(!showForm)} className="bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-800">
+        <button onClick={() => setShowForm(!showForm)} className="bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-800 cursor-pointer">
           + Add Lead
         </button>
       </div>
@@ -78,8 +105,8 @@ export default function LeadsPage() {
             <input placeholder="Region" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} className="border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700">Save</button>
-            <button type="button" onClick={() => setShowForm(false)} className="text-gray-500 text-sm">Cancel</button>
+            <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700 cursor-pointer">Save</button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-gray-500 text-sm cursor-pointer">Cancel</button>
           </div>
         </form>
       )}
@@ -90,6 +117,18 @@ export default function LeadsPage() {
         {csvResult && <p className="text-green-600 text-sm mt-1">{csvResult}</p>}
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <span className="text-sm text-red-700 font-medium">{selectedIds.size} selected</span>
+          <button onClick={deleteSelected} className="bg-red-600 text-white px-4 py-1.5 rounded-lg text-xs hover:bg-red-700 cursor-pointer">
+            Delete Selected
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-gray-500 text-xs hover:text-gray-700 cursor-pointer">
+            Clear
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         {loading ? (
           <p className="p-4 text-gray-500">Loading...</p>
@@ -99,6 +138,14 @@ export default function LeadsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b bg-gray-50">
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={leads.length > 0 && selectedIds.size === leads.length}
+                    onChange={toggleSelectAll}
+                    className="cursor-pointer"
+                  />
+                </th>
                 <th className="px-4 py-3">Company</th>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Industry</th>
@@ -110,6 +157,14 @@ export default function LeadsPage() {
             <tbody>
               {leads.map((lead) => (
                 <tr key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(lead.id)}
+                      onChange={() => toggleSelect(lead.id)}
+                      className="cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3 font-medium">{lead.companyName}</td>
                   <td className="px-4 py-3">{lead.email}</td>
                   <td className="px-4 py-3 text-gray-600">{lead.industry || "—"}</td>
@@ -123,7 +178,7 @@ export default function LeadsPage() {
                     }`}>{lead.status}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => deleteLead(lead.id)} className="text-red-500 hover:text-red-700 text-xs">Delete</button>
+                    <button onClick={() => deleteLead(lead.id)} className="text-red-500 hover:text-red-700 text-xs cursor-pointer">Delete</button>
                   </td>
                 </tr>
               ))}

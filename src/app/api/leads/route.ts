@@ -51,6 +51,18 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const id = parseInt(req.nextUrl.searchParams.get("id") || "");
+  const idsParam = req.nextUrl.searchParams.get("ids");
+
+  if (idsParam) {
+    const ids = idsParam.split(",").map(Number).filter((n) => n > 0);
+    if (ids.length === 0) {
+      return NextResponse.json({ error: "No valid ids" }, { status: 400 });
+    }
+    await prisma.emailLog.deleteMany({ where: { leadId: { in: ids } } });
+    await prisma.lead.deleteMany({ where: { id: { in: ids } } });
+    return NextResponse.json({ ok: true, deleted: ids.length });
+  }
+
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
   await prisma.emailLog.deleteMany({ where: { leadId: id } });
   await prisma.lead.delete({ where: { id } });
