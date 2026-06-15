@@ -1,13 +1,13 @@
 # Cold Mail Automation — Hopi Digital
 
-A web-based cold email outreach system built with **Next.js 16**, **Prisma**, and **SQLite**. Designed for Hopi Digital's Odoo implementation sales pipeline.
+A web-based cold email outreach system built with **Next.js 16**, **Prisma**, and **PostgreSQL**. Designed for Hopi Digital's Odoo implementation sales pipeline.
 
 ## Stack
 
 | Layer | Tech |
 |-------|------|
 | Framework | Next.js 16 (App Router) |
-| Database | SQLite via Prisma 5 |
+| Database | PostgreSQL via Prisma 5 |
 | Email | nodemailer (SMTP) |
 | Styling | Tailwind CSS 4 |
 | Language | TypeScript |
@@ -17,9 +17,9 @@ A web-based cold email outreach system built with **Next.js 16**, **Prisma**, an
 ```
 cold-mail-app/
 ├── prisma/
-│   ├── schema.prisma      ← Database models
-│   ├── seed.ts            ← Seed script (24 leads, settings, template)
-│   └── dev.db             ← SQLite database file
+│   ├── schema.prisma          ← Database models (PostgreSQL)
+│   ├── seed.ts                ← Seed script (24 leads, settings, template)
+│   └── migrations/            ← Migration files for deployment
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx                  ← Dashboard (stats + recent logs)
@@ -38,6 +38,8 @@ cold-mail-app/
 │   └── lib/
 │       ├── prisma.ts                 ← Prisma client singleton
 │       └── email.ts                  ← SMTP helpers
+├── vercel.json
+├── .env.example
 ├── package.json
 ├── tsconfig.json
 └── next.config.ts
@@ -52,7 +54,7 @@ cold-mail-app/
 | `/campaigns` | List all campaigns with status badges |
 | `/campaigns/new` | Compose email, pick leads, set delay/limit, send with live stream log |
 | `/logs` | Full email send history with status & error details |
-| `/settings` | SMTP credentials + sender info (stored in SQLite via Prisma) |
+| `/settings` | SMTP credentials + sender info (stored in DB via Prisma) |
 
 ## Database Models
 
@@ -61,14 +63,54 @@ cold-mail-app/
 - **EmailLog** — Send history (lead, campaign, status, error, timestamp)
 - **Setting** — Key-value store for SMTP & sender config
 
-## Quick Start
+## Local Development
+
+### 1. Database Setup
+
+You need a PostgreSQL database. Options:
+
+- **Local Postgres**: Install PostgreSQL locally, create a database named `coldmail`
+- **Neon (recommended)**: Free hosted Postgres at https://neon.tech (no credit card)
+- **Vercel Postgres**: Integrated with Vercel deployment
+
+### 2. Environment Variables
 
 ```bash
-npm install            # Installs deps + generates Prisma client + pushes schema
-npm run seed           # Seeds 24 leads, default SMTP settings, sample campaign
-npm run dev            # Starts on http://localhost:3000
-npm run build          # Production build
+cp .env.example .env
+# Edit .env with your PostgreSQL connection string
 ```
+
+### 3. Install & Seed
+
+```bash
+npm install
+npx prisma db push          # Creates tables
+npm run db:seed              # Seeds 24 leads, settings, sample campaign
+npm run dev                  # http://localhost:3000
+```
+
+## Deploy to Vercel
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/pungkiilham/coldmail-automation-hopi)
+
+### Steps
+
+1. Push to GitHub
+2. Import into Vercel
+3. Add environment variables:
+   - `DATABASE_URL` — PostgreSQL connection string (from Neon or Vercel Postgres)
+   - `DIRECT_DATABASE_URL` — Direct connection (for migrations)
+4. Deploy — build runs automatically
+5. Run `npx prisma migrate deploy` in Vercel post-deploy hook or locally:
+
+```bash
+npx prisma migrate deploy    # Applies migrations to production DB
+npx tsx prisma/seed.ts       # Seeds data (optional, run once)
+```
+
+### Note on Neon/Pooled Connections
+
+If using Neon's pooled connection string (with `?pgbouncer=true`), use it for `DATABASE_URL` and the direct (non-pooled) connection for `DIRECT_DATABASE_URL` so Prisma Migrate can run schema changes.
 
 ## Preloaded Data
 
@@ -88,7 +130,7 @@ npm run build          # Production build
 
 - Daily send limit (default 20) and per-email delay (default 30s) prevent spam flags
 - Campaigns auto-pause when daily limit is reached — resume later
-- SMTP password is stored in local SQLite, never exposed client-side
+- SMTP password stored in database, never exposed client-side
 
 ## Related Hopi Digital Assets
 
