@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -30,9 +29,9 @@ export default function LoginPage() {
 
       const params = new URLSearchParams(window.location.search);
       const redirect = params.get("redirect") || "/";
-      router.push(redirect);
+      window.location.href = redirect;
     } catch {
-      setError("Connection error");
+      setError("Connection error — check your network");
     } finally {
       setLoading(false);
     }
@@ -47,7 +46,9 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            {error}
+          </div>
         )}
 
         <input
@@ -60,19 +61,28 @@ export default function LoginPage() {
           className="border rounded-lg px-3 py-2 text-sm w-full"
         />
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          className="border rounded-lg px-3 py-2 text-sm w-full"
-        />
+        <div className="relative">
+          <input
+            type={showPassword ? "text" : "password"}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="border rounded-lg px-3 py-2 text-sm w-full pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-indigo-700 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-800 disabled:opacity-50"
+          className="w-full bg-indigo-700 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-800 disabled:opacity-50 cursor-pointer"
         >
           {loading ? "Signing in..." : "Sign In"}
         </button>
